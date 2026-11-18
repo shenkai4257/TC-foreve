@@ -351,17 +351,17 @@ public:
             dst = dst * pathRotation;
             dst += PositionToVector3(_owner.GetStationaryPosition());
 
-            bool const probeMoved = _owner.GetMap()->GameObjectRelocation(&_owner, dst.x, dst.y, dst.z, _owner.GetOrientation());
+            _owner.GetMap()->GameObjectRelocation(&_owner, dst.x, dst.y, dst.z, _owner.GetOrientation());
 
-            // [TramProbe] 周期诊断:进度/目标点/重定位结果(确认后移除)
+            // [TramProbe] 周期诊断:进度/目标点/实际位置(确认后移除)
             if (probeTram)
             {
                 static uint32 probeNextLog = 0;
                 if (GameTime::GetGameTimeMS() - probeNextLog > 3000)
                 {
                     probeNextLog = GameTime::GetGameTimeMS();
-                    TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 进度={}/{} 滑条完={} 目标=({:.1f},{:.1f},{:.1f}) 重定位={} 实际=({:.1f},{:.1f},{:.1f})",
-                        probeEntry, newProgress, GetTransportPeriod(), _owner.movespline->Finalized(), dst.x, dst.y, dst.z, probeMoved,
+                    TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 进度={}/{} 目标=({:.1f},{:.1f},{:.1f}) 实际=({:.1f},{:.1f},{:.1f})",
+                        probeEntry, newProgress, GetTransportPeriod(), dst.x, dst.y, dst.z,
                         _owner.GetPositionX(), _owner.GetPositionY(), _owner.GetPositionZ());
                 }
             }
