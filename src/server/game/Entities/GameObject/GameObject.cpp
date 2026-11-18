@@ -197,9 +197,25 @@ public:
 
         // [TramProbe] 一次性诊断:暴风城-铁炉堡地铁车厢创建状态(确认后移除)
         if (uint32 const entry = _owner.GetGOInfo()->entry; entry >= 176080 && entry <= 176085)
+        {
             TC_LOG_ERROR("entities.transport", "[TramProbe] Create entry={} animInfo={} period={} stopFrames={} progress={} spawn=({:.2f},{:.2f},{:.2f})",
                 entry, _animationInfo != nullptr, GetTransportPeriod(), _stopFrames.size(), _pathProgress,
                 _owner.GetStationaryPosition().GetPositionX(), _owner.GetStationaryPosition().GetPositionY(), _owner.GetStationaryPosition().GetPositionZ());
+
+            if (_animationInfo)
+            {
+                TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 帧总数={} TotalTime={}",
+                    entry, _animationInfo->Path.size(), _animationInfo->TotalTime);
+                uint32 dumped = 0;
+                for (auto const& [time, node] : _animationInfo->Path)
+                {
+                    TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 帧 time={}ms pos=({:.1f},{:.1f},{:.1f})",
+                        entry, time, node->Pos.X, node->Pos.Y, node->Pos.Z);
+                    if (++dumped >= 3)
+                        break;
+                }
+            }
+        }
     }
 
     void Update(uint32 diff) override
