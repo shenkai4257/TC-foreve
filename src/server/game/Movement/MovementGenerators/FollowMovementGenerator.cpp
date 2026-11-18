@@ -39,9 +39,9 @@ static constexpr float FOLLOW_BOT_REPATH_DIST = 2.5f;
 // range - so companions of a faster player track continuously instead of stuttering
 // through run/stop/run/stop cycles.
 static constexpr float FOLLOW_TARGET_DRIFT_SETTLE = 0.5f;
-// Speed catch-up for playerbot companions: inherit the leader's current pace and
-// multiply it while far behind, capped at AC's FOLLOW_CATCHUP_MAX_MULTIPLIER.
-static constexpr float FOLLOW_CATCHUP_MAX_MULTIPLIER = 2.6f;
+// Speed catch-up for playerbot companions: match the leader's current pace exactly;
+// a companion that fell well behind gets a modest catch-up boost, capped at 1.5x.
+static constexpr float FOLLOW_CATCHUP_MAX_MULTIPLIER = 1.5f;
 // A playerbot that cannot path to its leader warps to them beyond this distance.
 static constexpr float FOLLOW_STUCK_TELEPORT_DIST = 20.0f;
 
@@ -309,16 +309,18 @@ bool FollowMovementGenerator::Update(Unit* owner, uint32 diff)
                 init.SetWalk(target->IsWalking());
             init.SetFacing(target->GetOrientation());
 
-            // AC parity: companions inherit the leader's current pace, so a faster player
-            // does not leave a stop-and-go trail of bots behind them, with a distance
-            // based catch-up multiplier while far away.
+            // Companion pace rule: match the leader's current speed exactly, so bots
+            // neither trail forever nor outrun their leader. Only a companion that fell
+            // well behind (> 15y) gets a modest catch-up boost, capped at 1.5x.
             if (target->IsPlayer() && owner->IsPlayer())
             {
                 float const leadSpeed = target->movespline->Finalized()
                     ? target->GetSpeed(target->IsWalking() ? MOVE_WALK : MOVE_RUN)
                     : target->movespline->Velocity();
                 float const distToDest = owner->GetDistance2d(x, y);
-                float const multiplier = std::min(1.0f + (distToDest / 10.0f), FOLLOW_CATCHUP_MAX_MULTIPLIER);
+                float multiplier = 1.0f;
+                if (distToDest > 15.0f)
+                    multiplier = std::min(1.0f + ((distToDest - 15.0f) / 10.0f), FOLLOW_CATCHUP_MAX_MULTIPLIER);
                 init.SetVelocity(leadSpeed * multiplier);
             }
             init.Launch();
