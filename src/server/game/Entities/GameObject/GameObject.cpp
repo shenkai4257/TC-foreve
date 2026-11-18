@@ -199,6 +199,10 @@ public:
         _owner.SetPathProgressForClient(float(_pathProgress) / float(GetTransportPeriod()));
 
         _positionUpdateTimer.Reset(PositionUpdateInterval);
+    }
+
+    void Update(uint32 diff) override
+    {
 
         _positionUpdateTimer.Update(diff);
         if (!_positionUpdateTimer.Passed())
