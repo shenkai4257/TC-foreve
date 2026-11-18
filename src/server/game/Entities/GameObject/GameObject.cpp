@@ -226,14 +226,9 @@ public:
             {
                 TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 帧总数={} TotalTime={}",
                     entry, _animationInfo->Path.size(), _animationInfo->TotalTime);
-                uint32 dumped = 0;
                 for (auto const& [time, node] : _animationInfo->Path)
-                {
-                    TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 帧 time={}ms pos=({:.1f},{:.1f},{:.1f})",
+                    TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 帧 time={}ms pos=({:.2f},{:.2f},{:.2f})",
                         entry, time, node->Pos.X, node->Pos.Y, node->Pos.Z);
-                    if (++dumped >= 3)
-                        break;
-                }
             }
         }
     }
