@@ -137,9 +137,11 @@ GameObjectTypeBase::CustomCommand::~CustomCommand() = default;
 
 namespace GameObjectType
 {
-// 暴风城-铁炉堡地铁:这 4 节车厢的 wowstatic 帧时间线方向与其编组发车方向相反,
-// 需要镜像播放(时间轴取反)。临时数据级修复:待 TransportAnimation 数据修正后移除。
-static bool TramReversedPlayback(uint32 entry)
+// 暴风城-铁炉堡地铁:wowstatic TransportAnimation.db2(70399 快照)中,这 4 节车厢
+// (176081/176085 暴风城站、176082/176083 铁炉堡站)的动画帧 Y 坐标符号与其余车厢相反,
+// 轨迹被引向站外(废弃隧道段/地图边界外),导致车厢开进墙里。加载/寻路后对它们的
+// 帧 Y 取反,把轨迹修正回两站之间的合法隧道区间。数据级修复前的临时方案。
+static bool TramFlippedY(uint32 entry)
 {
     switch (entry)
     {
@@ -164,10 +166,6 @@ public:
         _autoCycleBetweenStopFrames(false)
     {
         GameObjectTemplate const* goInfo = _owner.GetGOInfo();
-
-        // 反向播放的车厢:初始进度同样镜像,保证创建即处于正确的编组相位
-        if (TramReversedPlayback(goInfo->entry) && _animationInfo)
-            _pathProgress = GetTransportPeriod() - _pathProgress;
         if (goInfo->transport.Timeto2ndfloor > 0)
         {
             _stopFrames.push_back(goInfo->transport.Timeto2ndfloor);
@@ -224,11 +222,12 @@ public:
 
             if (_animationInfo)
             {
+                float const ySignDump = TramFlippedY(entry) ? -1.0f : 1.0f;
                 TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 帧总数={} TotalTime={}",
                     entry, _animationInfo->Path.size(), _animationInfo->TotalTime);
                 for (auto const& [time, node] : _animationInfo->Path)
                     TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 帧 time={}ms pos=({:.2f},{:.2f},{:.2f})",
-                        entry, time, node->Pos.X, node->Pos.Y, node->Pos.Z);
+                        entry, time, node->Pos.X, node->Pos.Y * ySignDump, node->Pos.Z);
             }
         }
     }
@@ -237,6 +236,7 @@ public:
     {
         uint32 const probeEntry = _owner.GetGOInfo()->entry;
         bool const probeTram = probeEntry >= 176080 && probeEntry <= 176085;
+        float const ySign = TramFlippedY(probeEntry) ? -1.0f : 1.0f;
 
         if (!_animationInfo)
         {
@@ -249,10 +249,6 @@ public:
             return;
         }
 
-        // 暴风城-铁炉堡地铁:这 4 节车厢的 wowstatic 帧时间线方向与其编组发车方向相反,
-        // 需要镜像播放(时间轴取反)。临时数据级修复:待 TransportAnimation 数据修正后移除。
-        bool const reversePlayback = TramReversedPlayback(probeEntry);
-
         _positionUpdateTimer.Update(diff);
         if (!_positionUpdateTimer.Passed())
             return;
@@ -263,7 +259,7 @@ public:
         uint32 period = GetTransportPeriod();
         uint32 newProgress = 0;
         if (_stopFrames.empty())
-            newProgress = reversePlayback ? period - (now % period) : now % period;
+            newProgress = now % period;
         else
         {
             int32 stopTargetTime = 0;
@@ -372,8 +368,8 @@ public:
             G3D::Matrix3 pathRotation = G3D::Quat(_owner.m_gameObjectData->ParentRotation->x, _owner.m_gameObjectData->ParentRotation->y,
                 _owner.m_gameObjectData->ParentRotation->z, _owner.m_gameObjectData->ParentRotation->w).toRotationMatrix();
 
-            G3D::Vector3 prev(oldAnimation->Pos.X, oldAnimation->Pos.Y, oldAnimation->Pos.Z);
-            G3D::Vector3 next(newAnimation->Pos.X, newAnimation->Pos.Y, newAnimation->Pos.Z);
+            G3D::Vector3 prev(oldAnimation->Pos.X, oldAnimation->Pos.Y * ySign, oldAnimation->Pos.Z);
+            G3D::Vector3 next(newAnimation->Pos.X, newAnimation->Pos.Y * ySign, newAnimation->Pos.Z);
 
             G3D::Vector3 dst = next;
             if (prev != next)
