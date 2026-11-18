@@ -43,7 +43,7 @@ class FollowMovementGenerator : public MovementGenerator, public AbstractFollowe
         void Finalize(Unit*, bool, bool) override;
         MovementGeneratorType GetMovementGeneratorType() const override { return FOLLOW_MOTION_TYPE; }
 
-        void UnitSpeedChanged() override { _lastTargetPosition.reset(); }
+        void UnitSpeedChanged() override { _lastTargetPosition.reset(); _launchTargetPosition.reset(); }
 
         float GetRange() const { return _range; }
         Optional<ChaseAngle const> const& GetAngle() const { return _angle; }
@@ -61,6 +61,7 @@ class FollowMovementGenerator : public MovementGenerator, public AbstractFollowe
         Optional<TimeTracker> _duration;
         std::unique_ptr<PathGenerator> _path;
         Optional<Position> _lastTargetPosition;
+        Optional<Position> _launchTargetPosition;   // target position when the current follow spline was launched (AC drift-settle semantics)
         bool _throttleRepath = false;   // owner is a playerbot, or a pet / guardian of a player: see Update
 };
 
