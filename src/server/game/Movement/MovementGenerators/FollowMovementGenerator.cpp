@@ -145,11 +145,17 @@ bool FollowMovementGenerator::Update(Unit* owner, uint32 diff)
         if (cOwner->IsIgnoringChaseRange())
             range = 0.0f;
 
+    // AC parity (playerPet): while the leader is actively moving (movement flags from
+    // the client), a follower inside follow range never stops - otherwise the discrete
+    // position heartbeat makes the drift check read zero between heartbeats and the
+    // follower stutter-stops every half second while the leader is running.
+    bool const leaderMoving = target->m_movementInfo.HasMovementFlag(MOVEMENTFLAG_MASK_MOVING);
+
     _checkTimer.Update(diff);
     if (_checkTimer.Passed())
     {
         _checkTimer.Reset(CHECK_INTERVAL);
-        if (HasFlag(MOVEMENTGENERATOR_FLAG_INFORM_ENABLED) && PositionOkay(owner, target, range, _angle, _launchTargetPosition))
+        if (HasFlag(MOVEMENTGENERATOR_FLAG_INFORM_ENABLED) && PositionOkay(owner, target, range, _angle, _launchTargetPosition) && !leaderMoving)
         {
             RemoveFlag(MOVEMENTGENERATOR_FLAG_INFORM_ENABLED);
             _path = nullptr;
@@ -182,10 +188,12 @@ bool FollowMovementGenerator::Update(Unit* owner, uint32 diff)
         && _lastTargetPosition->GetExactDistSq(target->GetPosition()) < FOLLOW_BOT_REPATH_DIST * FOLLOW_BOT_REPATH_DIST)
         return true;
 
-    if (!_lastTargetPosition || _lastTargetPosition->GetExactDistSq(target->GetPosition()) > 0.0f)
+    // AC parity: while the leader is actively moving, keep the follower's spline
+    // continuously re-launched (no stand-still gap inside range+tolerance).
+    if (!_lastTargetPosition || _lastTargetPosition->GetExactDistSq(target->GetPosition()) > 0.0f || target->isMoving())
     {
         _lastTargetPosition = target->GetPosition();
-        if (owner->HasUnitState(UNIT_STATE_FOLLOW_MOVE) || !PositionOkay(owner, target, range + FOLLOW_RANGE_TOLERANCE, _angle, _launchTargetPosition))
+        if (owner->HasUnitState(UNIT_STATE_FOLLOW_MOVE) || !PositionOkay(owner, target, range + FOLLOW_RANGE_TOLERANCE, _angle, _launchTargetPosition) || target->isMoving())
         {
             if (!_path)
                 _path = std::make_unique<PathGenerator>(owner);
