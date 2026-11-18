@@ -27,8 +27,6 @@
 #include "Player.h"
 #include "WorldSession.h"
 
-#include <algorithm>
-
 // Target drift (yards) a playerbot follower tolerates before re-pathing a follow spline that is
 // still in flight. 2.5y at run speed is ~0.35 s of leader movement.
 static constexpr float FOLLOW_BOT_REPATH_DIST = 2.5f;
@@ -37,13 +35,10 @@ static constexpr float FOLLOW_BOT_REPATH_DIST = 2.5f;
 // stopped drifting from the point the current follow spline was launched at. While the
 // leader keeps moving, the follower keeps running - even when already inside follow
 // range - so companions of a faster player track continuously instead of stuttering
-// through run/stop/run/stop cycles.
+// through run/stop/run/stop cycles. AC's speed inheritance / interception only apply
+// to pets and guardians (not to playerbot companions, which are Players), so they are
+// intentionally NOT ported: companions run at their own natural speed.
 static constexpr float FOLLOW_TARGET_DRIFT_SETTLE = 0.5f;
-// Speed catch-up for playerbot companions: match the leader's current pace exactly;
-// a companion that fell well behind gets a modest catch-up boost, capped at 1.5x.
-static constexpr float FOLLOW_CATCHUP_MAX_MULTIPLIER = 1.5f;
-// A playerbot that cannot path to its leader warps to them beyond this distance.
-static constexpr float FOLLOW_STUCK_TELEPORT_DIST = 20.0f;
 
 static void DoMovementInform(Unit* owner, Unit* target)
 {
@@ -85,44 +80,6 @@ static bool PositionOkay(Unit* owner, Unit* target, float range, Optional<ChaseA
 
     if (launchPos && launchPos->GetExactDistSq(target->GetPosition()) > FOLLOW_TARGET_DRIFT_SETTLE * FOLLOW_TARGET_DRIFT_SETTLE)
         return false;
-
-    return true;
-}
-
-// AC parity: extrapolate where a moving target will be in ~0.5 s (the gap between the
-// MSG_MOVE_START_* opcode and the first heartbeat), so followers intercept instead of
-// trailing behind. Returns false for a stationary target.
-static bool GetPredictedPosition(Unit const* target, float& x, float& y)
-{
-    if (!target->isMoving())
-        return false;
-
-    float const speed = target->GetSpeed(target->IsWalking() ? MOVE_WALK : MOVE_RUN) * 0.5f;
-    float const ori = target->GetOrientation();
-    x = target->GetPositionX();
-    y = target->GetPositionY();
-
-    if (target->m_movementInfo.HasMovementFlag(MOVEMENTFLAG_FORWARD))
-    {
-        x += std::cos(ori) * speed;
-        y += std::sin(ori) * speed;
-    }
-    else if (target->m_movementInfo.HasMovementFlag(MOVEMENTFLAG_BACKWARD))
-    {
-        x -= std::cos(ori) * speed;
-        y -= std::sin(ori) * speed;
-    }
-
-    if (target->m_movementInfo.HasMovementFlag(MOVEMENTFLAG_STRAFE_LEFT))
-    {
-        x += std::cos(ori + M_PI / 2.0f) * speed;
-        y += std::sin(ori + M_PI / 2.0f) * speed;
-    }
-    else if (target->m_movementInfo.HasMovementFlag(MOVEMENTFLAG_STRAFE_RIGHT))
-    {
-        x += std::cos(ori - M_PI / 2.0f) * speed;
-        y += std::sin(ori - M_PI / 2.0f) * speed;
-    }
 
     return true;
 }
@@ -197,7 +154,10 @@ bool FollowMovementGenerator::Update(Unit* owner, uint32 diff)
             RemoveFlag(MOVEMENTGENERATOR_FLAG_INFORM_ENABLED);
             _path = nullptr;
             owner->StopMoving();
+            // AC parity: a settled follower turns to face the same direction as its leader.
+            owner->SetFacingTo(target->GetOrientation());
             _lastTargetPosition.reset();
+            _launchTargetPosition.reset();
             DoMovementInform(owner, target);
             return true;
         }
@@ -249,21 +209,6 @@ bool FollowMovementGenerator::Update(Unit* owner, uint32 diff)
 
             target->GetNearPoint(owner, x, y, z, range, target->ToAbsoluteAngle(tAngle));
 
-            // AC parity: intercept a moving leader instead of trailing behind them -
-            // aim at where the leader will be in ~0.5 s, validated against walls so the
-            // intercept point itself never ends up inside geometry.
-            if (target->isMoving())
-            {
-                float px, py;
-                if (GetPredictedPosition(target, px, py)
-                    && owner->GetExactDist2d(px, py) <= 15.0f
-                    && target->IsWithinLOS(px, py, z))
-                {
-                    x += px - target->GetPositionX();
-                    y += py - target->GetPositionY();
-                }
-            }
-
             // pets are allowed to "cheat" on pathfinding when following their master
             bool allowShortcut = false;
             if (Pet* oPet = owner->ToPet())
@@ -276,25 +221,6 @@ bool FollowMovementGenerator::Update(Unit* owner, uint32 diff)
             if (!success || (_path->GetPathType() & PATHFIND_NOPATH))
             {
                 owner->StopMoving();
-
-                // AC parity: a playerbot that is stuck far from its leader warps to them
-                // instead of idling forever (a server-side bot cannot unstick itself).
-                if (Player* botOwner = owner->ToPlayer())
-                {
-                    if (botOwner->GetSession() && botOwner->GetSession()->IsBot()
-                        && owner->GetMapId() == target->GetMapId()
-                        && owner->GetDistance(target) > FOLLOW_STUCK_TELEPORT_DIST)
-                    {
-                        float tx, ty, tz;
-                        target->GetClosePoint(tx, ty, tz, owner->GetCombatReach());
-                        if (botOwner->TeleportTo(target->GetMapId(), tx, ty, tz, target->GetOrientation()))
-                        {
-                            _lastTargetPosition.reset();
-                            _launchTargetPosition.reset();
-                            _path = nullptr;
-                        }
-                    }
-                }
                 return true;
             }
 
@@ -308,21 +234,6 @@ bool FollowMovementGenerator::Update(Unit* owner, uint32 diff)
             if (!_ignoreTargetWalk)
                 init.SetWalk(target->IsWalking());
             init.SetFacing(target->GetOrientation());
-
-            // Companion pace rule: match the leader's current speed exactly, so bots
-            // neither trail forever nor outrun their leader. Only a companion that fell
-            // well behind (> 15y) gets a modest catch-up boost, capped at 1.5x.
-            if (target->IsPlayer() && owner->IsPlayer())
-            {
-                float const leadSpeed = target->movespline->Finalized()
-                    ? target->GetSpeed(target->IsWalking() ? MOVE_WALK : MOVE_RUN)
-                    : target->movespline->Velocity();
-                float const distToDest = owner->GetDistance2d(x, y);
-                float multiplier = 1.0f;
-                if (distToDest > 15.0f)
-                    multiplier = std::min(1.0f + ((distToDest - 15.0f) / 10.0f), FOLLOW_CATCHUP_MAX_MULTIPLIER);
-                init.SetVelocity(leadSpeed * multiplier);
-            }
             init.Launch();
         }
     }
