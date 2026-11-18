@@ -137,23 +137,10 @@ GameObjectTypeBase::CustomCommand::~CustomCommand() = default;
 
 namespace GameObjectType
 {
-// 暴风城-铁炉堡地铁:wowstatic TransportAnimation.db2(70399 快照)中,这 4 节车厢
-// (176081/176085 暴风城站、176082/176083 铁炉堡站)的动画帧 Y 坐标符号与其余车厢相反,
-// 轨迹被引向站外(废弃隧道段/地图边界外),导致车厢开进墙里。加载/寻路后对它们的
-// 帧 Y 取反,把轨迹修正回两站之间的合法隧道区间。数据级修复前的临时方案。
-static bool TramFlippedY(uint32 entry)
-{
-    switch (entry)
-    {
-        case 176081:
-        case 176082:
-        case 176083:
-        case 176085:
-            return true;
-        default:
-            return false;
-    }
-}
+// 暴风城-铁炉堡地铁修复说明:6 节车厢各自携带独立的往返时间线(3 节负向 = 从铁炉堡站
+// 向暴风城端往返,3 节正向 = 从暴风城站向铁炉堡端往返)。Forever DB 原始数据把两组车的
+// 停靠站交叉分配(每组各有一节停在自己时间线的合法站,两节停在站后墙区),导致 4 节车
+// 开进站后墙里。已通过交换 gameobject 表中 4 节车的出生坐标修复(数据修复,非代码)。
 
 //11 GAMEOBJECT_TYPE_TRANSPORT
 class Transport : public GameObjectTypeBase, public TransportBase
@@ -222,12 +209,11 @@ public:
 
             if (_animationInfo)
             {
-                float const ySignDump = TramFlippedY(entry) ? -1.0f : 1.0f;
                 TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 帧总数={} TotalTime={}",
                     entry, _animationInfo->Path.size(), _animationInfo->TotalTime);
                 for (auto const& [time, node] : _animationInfo->Path)
                     TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 帧 time={}ms pos=({:.2f},{:.2f},{:.2f})",
-                        entry, time, node->Pos.X, node->Pos.Y * ySignDump, node->Pos.Z);
+                        entry, time, node->Pos.X, node->Pos.Y, node->Pos.Z);
             }
         }
     }
@@ -236,7 +222,6 @@ public:
     {
         uint32 const probeEntry = _owner.GetGOInfo()->entry;
         bool const probeTram = probeEntry >= 176080 && probeEntry <= 176085;
-        float const ySign = TramFlippedY(probeEntry) ? -1.0f : 1.0f;
 
         if (!_animationInfo)
         {
@@ -381,12 +366,6 @@ public:
 
             dst = dst * pathRotation;
             dst += PositionToVector3(_owner.GetStationaryPosition());
-
-            // 暴风城-铁炉堡地铁:错向车厢(176081/176082/176083/176085)的帧轨迹从编组位
-            // 向站后延伸(数据缺陷)。在世界空间把相对生成点的位移向量取反,使其掉头沿
-            // 正确方向驶向对面站(对任意车厢旋转均成立)。
-            if (TramFlippedY(probeEntry))
-                dst = PositionToVector3(_owner.GetStationaryPosition()) * 2.0f - dst;
 
             _owner.GetMap()->GameObjectRelocation(&_owner, dst.x, dst.y, dst.z, _owner.GetOrientation());
 
