@@ -368,8 +368,8 @@ public:
             G3D::Matrix3 pathRotation = G3D::Quat(_owner.m_gameObjectData->ParentRotation->x, _owner.m_gameObjectData->ParentRotation->y,
                 _owner.m_gameObjectData->ParentRotation->z, _owner.m_gameObjectData->ParentRotation->w).toRotationMatrix();
 
-            G3D::Vector3 prev(oldAnimation->Pos.X, oldAnimation->Pos.Y * ySign, oldAnimation->Pos.Z);
-            G3D::Vector3 next(newAnimation->Pos.X, newAnimation->Pos.Y * ySign, newAnimation->Pos.Z);
+            G3D::Vector3 prev(oldAnimation->Pos.X, oldAnimation->Pos.Y, oldAnimation->Pos.Z);
+            G3D::Vector3 next(newAnimation->Pos.X, newAnimation->Pos.Y, newAnimation->Pos.Z);
 
             G3D::Vector3 dst = next;
             if (prev != next)
@@ -381,6 +381,12 @@ public:
 
             dst = dst * pathRotation;
             dst += PositionToVector3(_owner.GetStationaryPosition());
+
+            // 暴风城-铁炉堡地铁:错向车厢(176081/176082/176083/176085)的帧轨迹从编组位
+            // 向站后延伸(数据缺陷)。在世界空间把相对生成点的位移向量取反,使其掉头沿
+            // 正确方向驶向对面站(对任意车厢旋转均成立)。
+            if (TramFlippedY(probeEntry))
+                dst = PositionToVector3(_owner.GetStationaryPosition()) * 2.0f - dst;
 
             _owner.GetMap()->GameObjectRelocation(&_owner, dst.x, dst.y, dst.z, _owner.GetOrientation());
 
