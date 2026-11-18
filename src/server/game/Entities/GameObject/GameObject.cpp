@@ -200,40 +200,6 @@ public:
 
         _positionUpdateTimer.Reset(PositionUpdateInterval);
 
-        // [TramProbe] 一次性诊断:暴风城-铁炉堡地铁车厢创建状态(确认后移除)
-        if (uint32 const entry = _owner.GetGOInfo()->entry; entry >= 176080 && entry <= 176085)
-        {
-            TC_LOG_ERROR("entities.transport", "[TramProbe] Create entry={} animInfo={} period={} stopFrames={} progress={} spawn=({:.2f},{:.2f},{:.2f})",
-                entry, _animationInfo != nullptr, GetTransportPeriod(), _stopFrames.size(), _pathProgress,
-                _owner.GetStationaryPosition().GetPositionX(), _owner.GetStationaryPosition().GetPositionY(), _owner.GetStationaryPosition().GetPositionZ());
-
-            if (_animationInfo)
-            {
-                TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 帧总数={} TotalTime={}",
-                    entry, _animationInfo->Path.size(), _animationInfo->TotalTime);
-                for (auto const& [time, node] : _animationInfo->Path)
-                    TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 帧 time={}ms pos=({:.2f},{:.2f},{:.2f})",
-                        entry, time, node->Pos.X, node->Pos.Y, node->Pos.Z);
-            }
-        }
-    }
-
-    void Update(uint32 diff) override
-    {
-        uint32 const probeEntry = _owner.GetGOInfo()->entry;
-        bool const probeTram = probeEntry >= 176080 && probeEntry <= 176085;
-
-        if (!_animationInfo)
-        {
-            static uint32 probeNextWarn = 0;
-            if (probeTram && GameTime::GetGameTimeMS() - probeNextWarn > 5000)
-            {
-                probeNextWarn = GameTime::GetGameTimeMS();
-                TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 无动画数据(_animationInfo 为空)→ 车厢静止于站台", probeEntry);
-            }
-            return;
-        }
-
         _positionUpdateTimer.Update(diff);
         if (!_positionUpdateTimer.Passed())
             return;
@@ -369,28 +335,6 @@ public:
 
             _owner.GetMap()->GameObjectRelocation(&_owner, dst.x, dst.y, dst.z, _owner.GetOrientation());
 
-            // [TramProbe] 周期诊断:进度/目标点/实际位置(确认后移除)
-            if (probeTram)
-            {
-                static uint32 probeNextLog = 0;
-                if (GameTime::GetGameTimeMS() - probeNextLog > 3000)
-                {
-                    probeNextLog = GameTime::GetGameTimeMS();
-                    TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 进度={}/{} 目标=({:.1f},{:.1f},{:.1f}) 实际=({:.1f},{:.1f},{:.1f})",
-                        probeEntry, newProgress, GetTransportPeriod(), dst.x, dst.y, dst.z,
-                        _owner.GetPositionX(), _owner.GetPositionY(), _owner.GetPositionZ());
-                }
-            }
-        }
-        else if (probeTram)
-        {
-            static uint32 probeNextNodeWarn = 0;
-            if (GameTime::GetGameTimeMS() - probeNextNodeWarn > 5000)
-            {
-                probeNextNodeWarn = GameTime::GetGameTimeMS();
-                TC_LOG_ERROR("entities.transport", "[TramProbe] entry={} 进度={} 找不到动画节点(Path.empty={} TotalTime={})",
-                    probeEntry, newProgress, _animationInfo->Path.empty(), _animationInfo->TotalTime);
-            }
         }
 
         TransportRotationEntry const* oldRotation = _animationInfo->GetPrevAnimRotation(newProgress);
