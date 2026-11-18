@@ -137,6 +137,22 @@ GameObjectTypeBase::CustomCommand::~CustomCommand() = default;
 
 namespace GameObjectType
 {
+// 暴风城-铁炉堡地铁:这 4 节车厢的 wowstatic 帧时间线方向与其编组发车方向相反,
+// 需要镜像播放(时间轴取反)。临时数据级修复:待 TransportAnimation 数据修正后移除。
+static bool TramReversedPlayback(uint32 entry)
+{
+    switch (entry)
+    {
+        case 176081:
+        case 176082:
+        case 176083:
+        case 176085:
+            return true;
+        default:
+            return false;
+    }
+}
+
 //11 GAMEOBJECT_TYPE_TRANSPORT
 class Transport : public GameObjectTypeBase, public TransportBase
 {
@@ -148,6 +164,10 @@ public:
         _autoCycleBetweenStopFrames(false)
     {
         GameObjectTemplate const* goInfo = _owner.GetGOInfo();
+
+        // 反向播放的车厢:初始进度同样镜像,保证创建即处于正确的编组相位
+        if (TramReversedPlayback(goInfo->entry) && _animationInfo)
+            _pathProgress = GetTransportPeriod() - _pathProgress;
         if (goInfo->transport.Timeto2ndfloor > 0)
         {
             _stopFrames.push_back(goInfo->transport.Timeto2ndfloor);
@@ -234,6 +254,10 @@ public:
             return;
         }
 
+        // 暴风城-铁炉堡地铁:这 4 节车厢的 wowstatic 帧时间线方向与其编组发车方向相反,
+        // 需要镜像播放(时间轴取反)。临时数据级修复:待 TransportAnimation 数据修正后移除。
+        bool const reversePlayback = TramReversedPlayback(probeEntry);
+
         _positionUpdateTimer.Update(diff);
         if (!_positionUpdateTimer.Passed())
             return;
@@ -244,7 +268,7 @@ public:
         uint32 period = GetTransportPeriod();
         uint32 newProgress = 0;
         if (_stopFrames.empty())
-            newProgress = now % period;
+            newProgress = reversePlayback ? period - (now % period) : now % period;
         else
         {
             int32 stopTargetTime = 0;
