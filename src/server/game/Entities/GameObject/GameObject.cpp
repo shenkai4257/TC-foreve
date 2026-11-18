@@ -137,10 +137,13 @@ GameObjectTypeBase::CustomCommand::~CustomCommand() = default;
 
 namespace GameObjectType
 {
-// 暴风城-铁炉堡地铁修复说明:6 节车厢各自携带独立的往返时间线(3 节负向 = 从铁炉堡站
-// 向暴风城端往返,3 节正向 = 从暴风城站向铁炉堡端往返)。Forever DB 原始数据把两组车的
-// 停靠站交叉分配(每组各有一节停在自己时间线的合法站,两节停在站后墙区),导致 4 节车
-// 开进站后墙里。已通过交换 gameobject 表中 4 节车的出生坐标修复(数据修复,非代码)。
+// Deeprun Tram (Stormwind-Ironforge) fix notes: each of the 6 tram cars carries its own
+// independent out-and-back timeline (3 negative-direction cars = shuttling from the Ironforge
+// side toward Stormwind, 3 positive-direction cars = shuttling from the Stormwind side toward
+// Ironforge). The original Forever DB data cross-assigned the spawn positions between the two
+// groups (each group had one car parked at a legal stop of its own timeline and two cars parked
+// inside the wall area behind the station), which drove 4 cars into the station walls. Fixed by
+// swapping the spawn coordinates of those 4 cars in the gameobject table (data fix, no code).
 
 //11 GAMEOBJECT_TYPE_TRANSPORT
 class Transport : public GameObjectTypeBase, public TransportBase
