@@ -22,6 +22,22 @@
 
 using namespace Playerbot::Combat::ClassicHeal;
 
+// naxx_patchwerk 1116 rerun: a soaker took a 9.8k Hateful Strike 3 s ago; the next one can come any moment, so it is the damage to cover.
+TEST_CASE("The largest recent hit is kept for the spike window and replaced only by a larger one", "[ClassicHealCover]")
+{
+    DamageSpike s;
+    CHECK(DamageSpikeAt(s, 1000) == 0);
+    DamageSpikeAdd(s, 9800, 1000);
+    DamageSpikeAdd(s, 1200, 2000);   // a swing after the strike does not lower it
+    CHECK(DamageSpikeAt(s, 4000) == 9800);
+    CHECK(DamageSpikeAt(s, 1000 + kSpikeWindowMs) == 9800);
+    CHECK(DamageSpikeAt(s, 1001 + kSpikeWindowMs) == 0);
+    DamageSpikeAdd(s, 1500, 20000);   // after the window, a new hit starts over
+    CHECK(DamageSpikeAt(s, 20000) == 1500);
+    // A soaker at 96% with a 9.8k spike is not covered by 7.6k in flight.
+    CHECK_FALSE(CoveredByHealsInFlight(10929, 10929 - 400, 0, 7600, 96, 1.0f, true, 9800));
+}
+
 // MC Garr 2026-10-10, patient 2605: 64 % health, 1406 missing, 1692 of swings coming, 2280 of heals in flight. Five healers piled on.
 TEST_CASE("Heals in flight that exceed the missing health plus half the swings refuse another heal", "[ClassicHealCover]")
 {

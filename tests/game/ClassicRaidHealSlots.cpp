@@ -58,3 +58,24 @@ TEST_CASE("without an off tank the main tank still comes first, absent tanks add
     CHECK(s[2] == 3);
     CHECK(HealSlotOrder(0, 0, {}, 5).empty());
 }
+
+TEST_CASE("a melee-soak boss gives the soakers three each and the main tank one, then a second", "[classic][heal]")
+{
+    auto const s = SoakHealSlotOrder(1, 2, { 3, 4 }, 10);
+    REQUIRE(s.size() == 10);
+    CHECK(s[0] == 1);
+    CHECK(std::count(s.begin(), s.end(), 1) == 1);
+    CHECK(std::count(s.begin(), s.end(), 2) == 3);
+    CHECK(std::count(s.begin(), s.end(), 3) == 3);
+    CHECK(std::count(s.begin(), s.end(), 4) == 3);
+    auto const full = SoakHealSlotOrder(1, 2, { 3 }, 99);
+    REQUIRE(full.size() == 8);
+    CHECK(full.back() == 1);
+    auto const short_budget = SoakHealSlotOrder(1, 2, { 3, 4 }, 4);
+    REQUIRE(short_budget.size() == 4);
+    CHECK(short_budget[0] == 1);
+    CHECK(short_budget[1] == 2);
+    CHECK(short_budget[2] == 3);
+    CHECK(short_budget[3] == 4);
+    CHECK(SoakHealSlotOrder(0, 0, {}, 5).empty());
+}

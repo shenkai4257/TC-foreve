@@ -846,7 +846,12 @@ TEST_CASE("ScenarioDefs: the other raids are one boss each, 40 raiders (BWL, AQ4
         CHECK(kt->start_npc == 15990u);
         CHECK(kt->start_npc_action == 1);
     }
-    CHECK(found.size() == 5 + 13 + 5 + 8 + 14);
+    // Every boss row of the five families, and Kel'Thuzad's scenario on top.
+    std::size_t rows = 0;
+    for (Family const& f : families)
+        rows += f.n;
+    CHECK(found.size() == rows + 1);
+    CHECK(rows == 5 + 13 + 5 + 8 + 14);
     // Arlokk has no creature row (the gong summons her): the runner summons her at the gong's spot.
     CHECK(FindScenario("zg_arlokk")->lair_z != 0.f);
     // Nor do the four Edge of Madness bosses (the Brazier of Madness brings one a lockout): each is summoned in front of the brazier.
